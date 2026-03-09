@@ -1,29 +1,30 @@
 #include <chrono>
 class Timer {
+    using clock = std::chrono::high_resolution_clock;
+
     FILE* m_file;
-    std::chrono::time_point<std::chrono::high_resolution_clock> m_start;
+    std::chrono::time_point<clock> m_start;
 
 public:
     Timer()
     {
         fopen_s(&m_file, "timepoints.txt", "w");
-        m_start = std::chrono::high_resolution_clock::now();
         fprintf(m_file, "[TIMER START]\n");
+        m_start = clock::now();
     }
 
     ~Timer()
     {
-        timepoint("TIMER END", "");
+        logTimepoint("TIMER END");
         std::fclose(m_file);
     }
 
-    void timepoint(const char* str1, const char* str2 = nullptr)
-    {
-        std::chrono::duration<double, std::milli> elapsed = std::chrono::high_resolution_clock::now() - m_start;
-        fprintf(m_file, "[%s %s]: %.3f ms\n", str1, str2, elapsed.count());
-    }
+    void restart() { m_start = clock::now(); }
 
-    void restart() { m_start = std::chrono::high_resolution_clock::now(); }
+    void logTimepoint(const char* str)
+    {
+        fprintf(m_file, "[%s]: %.3f ms\n", str, std::chrono::duration<float>(clock::now() - m_start).count() * 1000);
+    }
 
     static Timer& get()
     {
@@ -38,9 +39,9 @@ public:
         {
             Timer::get().restart();
         }
-        ~TimePoint() { Timer::get().timepoint(_timePointName, "function duration"); }
+        ~TimePoint() { Timer::get().logTimepoint(_timePointName); }
     };
 
 #define TIME_POINT_RAII(str) Timer::TimePoint localTimePoint(str);
-#define TIMEPOINT(str1, str2) Timer::get().timepoint(str1, str2);
+#define TIMEPOINT(str) Timer::get().logTimepoint(str);
 };
