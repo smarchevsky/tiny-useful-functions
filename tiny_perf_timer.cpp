@@ -1,47 +1,92 @@
 #include <chrono>
-class Timer {
-    using clock = std::chrono::high_resolution_clock;
+#include <stdio.h>
+class Logger {
+#ifdef _WIN32
+#define lock_stream(f) _lock_file(f)
+#define unlock_stream(f) _unlock_file(f)
+#else
+#define lock_stream(f) flockfile(f)
+#define unlock_stream(f) funlockfile(f)
+#endif
 
+    using clock = std::chrono::high_resolution_clock;
     FILE* m_file;
-    std::chrono::time_point<clock> m_start;
+    std::chrono::time_point<clock> _start;
 
 public:
-    Timer()
+    Logger()
     {
+#ifdef _WIN32
         fopen_s(&m_file, "timepoints.txt", "w");
-        fprintf(m_file, "[TIMER START]\n");
-        m_start = clock::now();
+#else
+        m_file = fopen("timepoints.txt", "w");
+#endif
+        if (m_file) {
+            fprintf(m_file, "[LOGGING START]\n");
+            fflush(m_file);
+        }
+        _start = clock::now();
     }
 
-    ~Timer()
+    void log(const char* format, ...)
     {
-        logTimepoint("TIMER END");
-        std::fclose(m_file);
-    }
+        if (!m_file)
+            return;
 
-    void restart() { m_start = clock::now(); }
+        va_list args;
+        va_start(args, format);
+        lock_stream(m_file);
+        vfprintf(m_file, format, args);
+        fputc('\n', m_file);
+        unlock_stream(m_file);
+        va_end(args);
+    }
 
     void logTimepoint(const char* str)
     {
-        fprintf(m_file, "[%s]: %.3f ms\n", str, std::chrono::duration<float>(clock::now() - m_start).count() * 1000);
+        const float duration = std::chrono::duration<float>(clock::now() - _start).count();
+        log("Timepoint: [%s] %f", str, duration * 1000);
     }
 
-    static Timer& get()
+    ~Logger()
     {
-        static Timer instance;
+        if (m_file) {
+            lock_stream(m_file);
+            fprintf(m_file, "[LOGGING END]\n");
+            unlock_stream(m_file);
+            fclose(m_file);
+            m_file = nullptr;
+        }
+    }
+
+    static Logger& get()
+    {
+        static Logger instance;
         return instance;
     }
+};
 
-    struct TimePoint {
-        const char* _timePointName;
-        TimePoint(const char* funcName)
-            : _timePointName(funcName)
-        {
-            Timer::get().restart();
-        }
-        ~TimePoint() { Timer::get().logTimepoint(_timePointName); }
-    };
+class ScopeTimer {
+    using clock = std::chrono::high_resolution_clock;
+    std::chrono::time_point<clock> _start;
+    const char* _timerName;
 
-#define TIME_POINT_RAII(str) Timer::TimePoint localTimePoint(str);
-#define TIMEPOINT(str) Timer::get().logTimepoint(str);
+public:
+    ScopeTimer(const ScopeTimer&) = delete;
+    ScopeTimer(ScopeTimer&&) = delete;
+    ScopeTimer(const char* str)
+        : _timerName(str)
+    {
+        Logger::get().log("%s, start", _timerName);
+        _start = clock::now();
+    }
+
+    ~ScopeTimer()
+    {
+        const float duration = std::chrono::duration<float>(clock::now() - _start).count();
+        Logger::get().log("%s, finished %.3f ms", _timerName, duration * 1000);
+    }
+
+#define TIME_POINT_RAII(str) ScopeTimer scopeTimer(str);
+#define TIMEPOINT(str) Logger::get().logTimepoint(#str);
 };
