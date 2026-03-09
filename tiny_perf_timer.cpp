@@ -14,7 +14,7 @@ class Logger {
 
     FILE* _file;
     std::chrono::time_point<clock> _start;
-    int _indentation;
+    uint8_t _indentation;
 
 public:
     Logger()
@@ -32,37 +32,30 @@ public:
         _start = clock::now();
     }
 
-    template <bool WithIdentation>
+    template <bool WithIdentation = false>
     void log(const char* format, ...)
     {
         if (!_file)
             return;
 
-        va_list args;
-        va_start(args, format);
         lock_stream(_file);
-        if constexpr (WithIdentation) {
+
+        if constexpr (WithIdentation)
             for (int i = 0; i < _indentation; ++i)
                 fputc(' ', _file);
-        }
-        vfprintf(_file, format, args);
-        fputc('\n', _file);
+
+        va_list args;
+        va_start(args, format), vfprintf(_file, format, args), va_end(args);
+
         unlock_stream(_file);
-        va_end(args);
     }
 
-    void logTimepoint(const char* str)
-    {
-        const float duration = std::chrono::duration<float>(clock::now() - _start).count();
-        log<false>("Timepoint: [%s] %f", str, duration * 1000);
-    }
+    double getDuration() const { return std::chrono::duration<double>(clock::now() - _start).count(); }
 
     ~Logger()
     {
         if (_file) {
-            lock_stream(_file);
-            fprintf(_file, "[LOGGING END]\n");
-            unlock_stream(_file);
+            log("[LOGGING END]\n");
             fclose(_file);
             _file = nullptr;
         }
@@ -73,6 +66,8 @@ public:
         static Logger instance;
         return instance;
     }
+
+#define TIMEPOINT(format, ...) Logger::get().log(format "\t %.3f ms\n", ##__VA_ARGS__, Logger::get().getDuration())
 };
 
 class ScopeTimer {
@@ -87,7 +82,7 @@ public:
         : _timerName(str)
     {
         Logger::get()._indentation += 2;
-        Logger::get().log<true>("%s, start", _timerName);
+        Logger::get().log<true>("%s, started", _timerName);
         _start = clock::now();
     }
 
@@ -99,5 +94,4 @@ public:
     }
 
 #define TIMEPOINT_RAII(str) ScopeTimer scopeTimer(str);
-#define TIMEPOINT(str) Logger::get().logTimepoint(str);
 };
