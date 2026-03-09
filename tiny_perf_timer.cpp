@@ -12,7 +12,7 @@ class Logger {
     using clock = std::chrono::high_resolution_clock;
     friend class ScopeTimer;
 
-    FILE* m_file;
+    FILE* _file;
     std::chrono::time_point<clock> _start;
     int _indentation;
 
@@ -20,13 +20,13 @@ public:
     Logger()
     {
 #ifdef _WIN32
-        fopen_s(&m_file, "timepoints.txt", "w");
+        fopen_s(&_file, "timepoints.txt", "w");
 #else
-        m_file = fopen("timepoints.txt", "w");
+        _file = fopen("timepoints.txt", "w");
 #endif
-        if (m_file) {
-            fprintf(m_file, "[LOGGING START]\n");
-            fflush(m_file);
+        if (_file) {
+            fprintf(_file, "[LOGGING START]\n");
+            fflush(_file);
         }
         _indentation = 0;
         _start = clock::now();
@@ -35,19 +35,19 @@ public:
     template <bool WithIdentation>
     void log(const char* format, ...)
     {
-        if (!m_file)
+        if (!_file)
             return;
 
         va_list args;
         va_start(args, format);
-        lock_stream(m_file);
+        lock_stream(_file);
         if constexpr (WithIdentation) {
             for (int i = 0; i < _indentation; ++i)
-                fputc(' ', m_file);
+                fputc(' ', _file);
         }
-        vfprintf(m_file, format, args);
-        fputc('\n', m_file);
-        unlock_stream(m_file);
+        vfprintf(_file, format, args);
+        fputc('\n', _file);
+        unlock_stream(_file);
         va_end(args);
     }
 
@@ -59,12 +59,12 @@ public:
 
     ~Logger()
     {
-        if (m_file) {
-            lock_stream(m_file);
-            fprintf(m_file, "[LOGGING END]\n");
-            unlock_stream(m_file);
-            fclose(m_file);
-            m_file = nullptr;
+        if (_file) {
+            lock_stream(_file);
+            fprintf(_file, "[LOGGING END]\n");
+            unlock_stream(_file);
+            fclose(_file);
+            _file = nullptr;
         }
     }
 
@@ -98,6 +98,6 @@ public:
         Logger::get()._indentation -= 2;
     }
 
-#define TIME_POINT_RAII(str) ScopeTimer scopeTimer(str);
-#define TIMEPOINT(str) Logger::get().logTimepoint(#str);
+#define TIMEPOINT_RAII(str) ScopeTimer scopeTimer(str);
+#define TIMEPOINT(str) Logger::get().logTimepoint(str);
 };
