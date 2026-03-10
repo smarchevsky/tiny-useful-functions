@@ -51,6 +51,7 @@ public:
     }
 
     double getDuration() const { return std::chrono::duration<double>(clock::now() - _start).count(); }
+    void reset() { _start = clock::now(); }
 
     ~Logger()
     {
@@ -67,7 +68,12 @@ public:
         return instance;
     }
 
-#define TIMEPOINT(format, ...) Logger::get().log(format "\t %.3f ms\n", ##__VA_ARGS__, Logger::get().getDuration() * 1000.0)
+// #define TIMEPOINT_RESET_OPTION , Logger::get().reset()
+#define TIMEPOINT_RESET_OPTION
+#define TIMEPOINT_DURATION_MS (Logger::get().getDuration() * 1000.0)
+#define TIMEPOINT_DURATION_AFTER(format, ...) Logger::get().log(format "\t %.3f ms\n", ##__VA_ARGS__, TIMEPOINT_DURATION_MS) TIMEPOINT_RESET_OPTION;
+#define TIMEPOINT_DURATION_BEFORE(format, ...) Logger::get().log("%.3f ms \t" format "\n", TIMEPOINT_DURATION_MS, ##__VA_ARGS__) TIMEPOINT_RESET_OPTION;
+#define TIMEPOINT TIMEPOINT_DURATION_BEFORE
 };
 
 class ScopeTimer {
@@ -89,7 +95,7 @@ public:
     ~ScopeTimer()
     {
         const float duration = std::chrono::duration<float>(clock::now() - _start).count();
-        Logger::get().log<true>("%s, finished %.3f ms", _timerName, duration * 1000.0);
+        Logger::get().log<true>("%s, finished %.3f ms", _timerName, duration * 1000);
         Logger::get()._indentation -= 2;
     }
 
